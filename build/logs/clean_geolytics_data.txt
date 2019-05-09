@@ -1,0 +1,125 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /home/sweeneri/Projects/Pipelines/DraftFiles/build/logs/clean_geol
+> ytics_data.txt
+  log type:  text
+ opened on:   1 Nov 2017, 20:20:12
+
+. set linesize 255
+
+. 
+. *merge in geolytics data
+. use $adir/input/Geolytics_clean_all_years.dta, clear
+
+. format areakey %11.0f
+
+. /*geolytics data is by tract. 
+> area key is defined as state_fips (no leading zero)| county fips (3 digits) | tractid (6 digits) */
+. 
+. tostring areakey, gen(ta) format(%11.0f)
+ta generated as str11
+
+. gen te = length(ta)
+
+. gen tract_id = substr(ta,5,6)
+
+. replace tract_id = substr(ta,6,6) if te == 11
+(356,136 real changes made)
+
+. destring tract_id, replace
+tract_id: all characters numeric; replaced as long
+
+. 
+. rename county county_id
+
+. keep if state == 6
+(389,970 observations deleted)
+
+. 
+. 
+. gen share_rent = rntocc/(rntocc+ownocc)
+(1,077 missing values generated)
+
+. 
+. gen share_nonwhite_tot = 1 - (totoccw / occhu)
+(8,479 missing values generated)
+
+. 
+. gen share_nonwhite_occ= 1 - (ownoccw / ownocc)
+(8,666 missing values generated)
+
+. 
+. gen share_hs = (educ11 + educ12 + educ15 + educ16) / educpp 
+(9,009 missing values generated)
+
+. gen share_college = (educ16) / educpp 
+(9,009 missing values generated)
+
+. 
+. rename kids share_kidsU5
+
+. 
+. gen share_pubassist = avpblad/occhu
+(9,084 missing values generated)
+
+. 
+. sum share_pu, detail
+
+                       share_pubassist
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%            0              0
+ 5%     .0041356              0
+10%     .0130674              0       Obs              39,204
+25%     .0342783              0       Sum of Wgt.      39,204
+
+50%     .0776506                      Mean           .1082704
+                        Largest       Std. Dev.      .1036251
+75%     .1558101       1.210526
+90%     .2477257            1.4       Variance       .0107382
+95%     .3023256       1.666667       Skewness       4.430228
+99%     .4194444              5       Kurtosis       136.5143
+
+. 
+. gen pop_density = trctpop/arealand
+(8,108 missing values generated)
+
+. 
+. global glvars md* avgern car trctpop occhu ownocc pop_density share* 
+
+. 
+. foreach v of varlist $glvars {
+  2.         replace `v' = . if `v'  < 0
+  3. }
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(71 real changes made, 71 to missing)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(44 real changes made, 44 to missing)
+(0 real changes made)
+(1 real change made, 1 to missing)
+(533 real changes made, 533 to missing)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+. 
+. 
+. rename year gl_year
+
+. keep county_id tract_id  $glvars gl_year
+
+. foreach v of varlist $glvars {
+  2.         rename `v' gl_`v'
+  3. }
+
+. save $bdir/output/geolyitcsdata, replace
+file /home/sweeneri/Projects/Pipelines/build/output/geolyitcsdata.dta saved
+
+. 
+. capture log close 

@@ -1,0 +1,78 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /home/sweeneri/Projects/Pipelines/DraftFiles/output/logs/tabs_n_fi
+> gs_sample.txt
+  log type:  text
+ opened on:  13 Nov 2017, 15:28:33
+
+. set linesize 255
+
+. 
+. global hedonics "lnsqft _X*"
+
+.  
+. use if insample == 1 & random_id < 0.05 using $ddir/generated_data/dd_regdata, clear
+
+.         replace km_to_ng =  km_to_ng_nodistr
+(49,383 real changes made)
+
+.         replace km_to_anyPGEng = km_to_ng_nodistr_pge
+(37,967 real changes made)
+
+.         replace ft_to_ng =  ft_to_ng_nodistr
+(48,910 real changes made)
+
+.         replace ft_to_anyPGEng = ft_to_ng_nodistr_pge
+(37,757 real changes made)
+
+.     keep if !mi(gasutility)
+(26,336 observations deleted)
+
+. 
+. save tempdat, replace
+file tempdat.dta saved
+
+. 
+. 
+. *** GRAPH PRICE AND QUANTITY TRENDS
+. use tempdat, clear
+
+. 
+. gen pgroup = "far"
+
+. replace pgroup = "close" if ft_to_ng < 2000
+variable pgroup was str3 now str5
+(65,588 real changes made)
+
+. 
+. gen nsales = 1 
+
+. collapse (mean) lnprice sr_val_transfer yr_since_transfer_al (sum) nsales, by(pgroup ym_sale)
+
+. save cdat, replace
+file cdat.dta saved
+
+. 
+. use cdat, clear
+
+. separate lnprice, by(pgroup)
+
+              storage   display    value
+variable name   type    format     label      variable label
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+lnprice1        float   %9.0g                 lnprice, pgroup == close
+lnprice2        float   %9.0g                 lnprice, pgroup == far
+
+. drop lnprice
+
+. twoway line lnprice* ym, ytitle("log(price)") ///
+>                 legend(label(1 "Within 2000ft" ) label(2 "Greater than 2000ft")) ///
+>                 xline(608, lcolor(black) lpattern(dash)) 
+
+. gr export "$ddir/output/price_trend_full_sample.eps", as(eps) replace
+(file /home/sweeneri/Projects/Pipelines/DraftFiles/output/price_trend_full_sample.eps written in EPS format)
+
+. 
+. exit
+
+end of do-file

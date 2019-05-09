@@ -1,0 +1,111 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /home/sweeneri/Projects/Pipelines/DraftFiles/output/logs/platts_po
+> sitional_accuracy.txt
+  log type:  text
+ opened on:  13 Nov 2017, 15:27:19
+
+. set linesize 255
+
+. 
+. use "$bdir/output/Platts_NG_Attributes.dta", clear
+
+. 
+. gen accuracy_ft = .
+(6,120 missing values generated)
+
+. replace accuracy_ft = 165 if regexm(pos_rel,"165")
+(1,902 real changes made)
+
+. replace accuracy_ft = 40 if regexm(pos_rel,"40")
+(4,216 real changes made)
+
+. gen owner_cat = "Other"
+
+. replace owner_cat = "PG&E" if owner == "Pacific Gas and Electric Co."
+(3,506 real changes made)
+
+. replace owner_cat = "SoCal" if owner == "Southern California Gas Co."
+(2,030 real changes made)
+
+. replace owner_cat = "SDG&E" if owner == "San Diego Gas & Electric Co."
+(272 real changes made)
+
+. label var owner_cat "Pipeline Owner"
+
+. 
+. gen largediam = (diameter > 6)
+
+. gen missingdiam = (inlist(diameter,0,-99))
+
+. gen distrib = regexm(system1,"Dcust.*|Gcust.*|Dreg.*|Distribution.*")
+
+. gen misys1 = mi(system1)
+
+. gen mitype = mi(type)
+
+. 
+. gen trans_pipe = (distrib == 0 & (diameter > 6 | (inlist(diameter,0,-99) & ///
+>                                 !(misys1 == 1 & mitype == 1))))
+
+. label def translbl 0 "Distr./Unk." 1 "Trans." 
+
+. label values trans_pipe translbl
+
+. label var trans_pipe "Pipeline Type"
+
+. 
+. label def acclbl 40 "Within 40 ft." 165 "Within 165 ft." 
+
+. label values accuracy_ft acclbl
+
+. label var accuracy_ft "Minimum Positional Accuracy"
+
+. 
+. qui: tabout owner_cat trans_pipe [aw=platts_gis_length] using $ddir/output/platts_ng_accuracy_means.tex, ///
+> cells(mean accuracy_ft) format(1c 1c 1c) clab(_ _ _) ///
+> layout(rb) sum ///
+> style(tex) bt ///
+> topf($adir/code/top.tex) topstr(\textwidth) ptotal(none) botf($adir/code/bot.tex) ///
+>  h3(nil) replace
+
+. 
+. qui: tabout owner_cat accuracy_ft [aw=platts_gis_length] if trans_pipe == 1 using $ddir/output/platts_ng_accuracy_trans.tex, ///
+> cells(row) format(1c 1c 1c) clab(_ _ _) ///
+> layout(rb) ///
+> style(tex) bt ///
+> topf($adir/code/top.tex) topstr(\textwidth) ptotal(none) botf($adir/code/bot.tex) ///
+>  h3(Transmission lines only) replace
+
+. 
+. 
+. tabout owner_cat trans_pipe [aw=platts_gis_length] using $adir/temp/temp.txt, ///
+> cells(mean accuracy_ft) format(1c 1c 1c) clab(_ _ _) ///
+> layout(rb) sum ///
+> replace
+
+Table output written to: /home/sweeneri/Projects/Pipelines/analysis//temp/temp.txt
+
+        Pipeline Type           
+Pipeline Owner  Distr./Unk.     Trans.  Total
+                         
+Other   40.0    55.7    55.7
+PG&E    122.9   61.8    77.0
+SDG&E   124.7   96.2    108.2
+SoCal   103.3   82.8    89.5
+Total   113.4   67.0    77.5
+
+. 
+. tabout owner_cat accuracy_ft [aw=platts_gis_length] if trans_pipe == 1 using $ddir/output/temp/temp.txt, ///
+> cells(row) format(1c 1c 1c) clab(_ _ _) ///
+> layout(rb) replace
+
+File /home/sweeneri/Projects/Pipelines/DraftFiles/output/temp/temp.txt
+is already open inside another application.
+Please close it before running tabout.
+
+
+. 
+. erase $adir/temp/temp.txt
+
+. capture log close

@@ -1,0 +1,855 @@
+------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /home/sweeneri/Projects/Pipelines/DraftFiles/output/logs/pdd_sample_descriptives.txt
+  log type:  text
+ opened on:  20 Nov 2017, 10:27:50
+
+. set linesize 255
+
+. 
+. global hedonics "lnsqft _X*"
+
+.  
+. use if insample == 1 & random_id < 1.01 using $ddir/generated_data/dd_regdata, clear
+
+.         replace km_to_ng =  km_to_ng_nodistr
+(987,965 real changes made)
+
+.         replace km_to_anyPGEng = km_to_ng_nodistr_pge
+(763,505 real changes made)
+
+.         replace ft_to_ng =  ft_to_ng_nodistr
+(978,752 real changes made)
+
+.         replace ft_to_anyPGEng = ft_to_ng_nodistr_pge
+(759,482 real changes made)
+
+.     keep if gasutility == "PGE"
+(2,454,021 observations deleted)
+
+.     keep if ft_to_ng <= 4000
+(535,810 observations deleted)
+
+.     
+.  
+. capture drop _T* PGE
+
+. do $ddir/analysis/pdd_prep_distance_defs.do
+
+. *define this in a separate do file so i can rerun the same code 
+. *after dropping distribution lines in other files
+. 
+. gen PGEpipe = cond(km_to_ng == km_to_anyPGEng,1,0)
+
+. gen PGEterr = (gasutility == "PGE")
+
+. * Note: in current approach, all PGE pipe is in PGE territory, but there are some houses closest to non-PGE pipe
+. * That is PGEpipe == 1 => PGEterr == 1 but not the converse
+. 
+. replace period = "PostCrash" if period == "Pre" & sr_date_transfer > (td(09sept2010) - 450)
+(0 real changes made)
+
+. 
+. /*NAMING CONVENTION
+> _T*_PERIOD_DISTANCE_PGE
+> T - DENOTES HOW DISTANCE IS SPECIFIED (IE 2K OR 660 FOOT BINS)
+> 
+> - SO TO RUN WITH PROPERTY FES, SPECIFY _T*_EXP AND _T*_LET
+> ---- FOR CROSS SECTION, ONLY NEED _T*
+> */
+. 
+. *1000 FOOT BIN REG SETUP
+. cap drop bin1k 
+
+. cap drop _T1k* 
+
+. global blist 2000 1000
+
+. gen bin1k = 9999
+
+. foreach b in $blist {
+  2.         replace bin1k = `b' if ft_to_ng < `b'
+  3. }
+(544,490 real changes made)
+(287,485 real changes made)
+
+. 
+. * Period main effect (mostly picked up by month FE?)
+. gen _T1k_exp = period == "PostExp"
+
+. label var _T1k_exp "SanBruno"
+
+. gen _T1k_let = period == "PostLetter"
+
+. label var _T1k_let "Letter"
+
+. 
+. * Bin-related variables
+. foreach b in $blist {
+  2.     * main effect in and out of PGE by bin
+.         gen _T1k_bin_`b' = bin1k == `b'
+  3.         label var _T1k_bin_`b' "`b'ft"
+  4. 
+.     * explosion period by bin
+.         gen _T1k_exp_`b' = period == "PostExp" & bin1k == `b'
+  5.         label var _T1k_exp_`b' "PostExp-`b'ft"
+  6. 
+.     * letter period in and out of PGE by bin
+.         gen _T1k_let_`b' = period == "PostLetter" & bin1k == `b'
+  7.         label var _T1k_let_`b' "PostLetter-`b'ft"
+  8.         
+. }
+
+. 
+. 
+. /* Road bins by period-territory */
+. capture drop rbin _RB* 
+
+. global blist 2000 1000
+
+. gen rbin = 9999
+
+. gen ft_to_roads = 3280.84*km_to_roads
+
+. foreach b in $blist {
+  2.         replace rbin = `b' if ft_to_roads < `b'
+  3. }
+(327,984 real changes made)
+(157,201 real changes made)
+
+. 
+. foreach b in $blist {
+  2.     * main effect in and out of PGE by road bin
+.         gen _RB_bin_`b' = rbin == `b'
+  3.         label var _RB_bin_`b' "Hwy `b'ft"
+  4. 
+.     * explosion period by road bin
+.         gen _RB_exp_`b' = period == "PostExp" & rbin == `b'
+  5.         label var _RB_exp_`b' "PostExp- hwy `b'ft"
+  6. 
+.     * letter period by road bin
+.         gen _RB_let_`b' = period == "PostLetter" & rbin == `b'
+  7.         label var _RB_let_`b' "PostLetter-hwy `b'ft"
+  8.         
+. }
+
+. 
+. 
+. 
+end of do-file
+
+. 
+. /* Show covariate support of sample */
+. 
+. gen ft_to_roads = 3280.84*km_to_roads
+variable ft_to_roads already defined
+r(110);
+
+end of do-file
+
+r(110);
+
+. do "/scratch/sweeneri/SD07775.000000"
+
+. 
+. summ price rbaths bedrooms pool garage ft_to_roads n_foreclose_pre6 
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       price |    924,500    465383.2    318243.7   18396.64    3400556
+      rbaths |    924,500    2.051844    .8043875          0          5
+    bedrooms |    924,500    2.910301    1.030778          0          5
+        pool |    924,500    .3979448    1.319282          0          5
+      garage |    924,500    37.08614    45.51925          1         99
+-------------+---------------------------------------------------------
+ ft_to_roads |    924,500    4161.656    3968.939   .0217315   40950.15
+n_foreclos~6 |    924,500    11.86873    13.56739          0        149
+
+. 
+. twoway (histogram bedrooms if _T2k__2k ==1, start(0) width(1) color(gray)) ///
+>        (histogram bedrooms if _T2k__2k ==0, start(0) width(1) ///
+>            fcolor(none) lcolor(black)), legend(order(1 "0-2000 ft." 2 "> 2000 ft." )) name(bedrooms, replace) xlabel(0(1)5) xtitle("Bedrooms", height(4)) title("Number of Bedrooms") scheme(s1mono)
+_T2k__2k not found
+r(111);
+
+end of do-file
+
+r(111);
+
+. do "/scratch/sweeneri/SD07775.000000"
+
+.  
+. use if insample == 1 & random_id < 1.01 using $ddir/generated_data/dd_regdata, clear
+
+.         replace km_to_ng =  km_to_ng_nodistr
+(987,965 real changes made)
+
+.         replace km_to_anyPGEng = km_to_ng_nodistr_pge
+(763,505 real changes made)
+
+.         replace ft_to_ng =  ft_to_ng_nodistr
+(978,752 real changes made)
+
+.         replace ft_to_anyPGEng = ft_to_ng_nodistr_pge
+(759,482 real changes made)
+
+.     keep if gasutility == "PGE"
+(2,454,021 observations deleted)
+
+.     keep if ft_to_ng <= 4000
+(535,810 observations deleted)
+
+.     
+.  
+. capture drop _T* PGE
+
+. do $ddir/analysis/pdd_prep_distance_defs.do
+
+. *define this in a separate do file so i can rerun the same code 
+. *after dropping distribution lines in other files
+. 
+. gen PGEpipe = cond(km_to_ng == km_to_anyPGEng,1,0)
+
+. gen PGEterr = (gasutility == "PGE")
+
+. * Note: in current approach, all PGE pipe is in PGE territory, but there are some houses closest to non-PGE pipe
+. * That is PGEpipe == 1 => PGEterr == 1 but not the converse
+. 
+. replace period = "PostCrash" if period == "Pre" & sr_date_transfer > (td(09sept2010) - 450)
+(0 real changes made)
+
+. 
+. /*NAMING CONVENTION
+> _T*_PERIOD_DISTANCE_PGE
+> T - DENOTES HOW DISTANCE IS SPECIFIED (IE 2K OR 660 FOOT BINS)
+> 
+> - SO TO RUN WITH PROPERTY FES, SPECIFY _T*_EXP AND _T*_LET
+> ---- FOR CROSS SECTION, ONLY NEED _T*
+> */
+. 
+. *1000 FOOT BIN REG SETUP
+. cap drop bin1k 
+
+. cap drop _T1k* 
+
+. global blist 2000 1000
+
+. gen bin1k = 9999
+
+. foreach b in $blist {
+  2.         replace bin1k = `b' if ft_to_ng < `b'
+  3. }
+(544,490 real changes made)
+(287,485 real changes made)
+
+. 
+. * Period main effect (mostly picked up by month FE?)
+. gen _T1k_exp = period == "PostExp"
+
+. label var _T1k_exp "SanBruno"
+
+. gen _T1k_let = period == "PostLetter"
+
+. label var _T1k_let "Letter"
+
+. 
+. * Bin-related variables
+. foreach b in $blist {
+  2.     * main effect in and out of PGE by bin
+.         gen _T1k_bin_`b' = bin1k == `b'
+  3.         label var _T1k_bin_`b' "`b'ft"
+  4. 
+.     * explosion period by bin
+.         gen _T1k_exp_`b' = period == "PostExp" & bin1k == `b'
+  5.         label var _T1k_exp_`b' "PostExp-`b'ft"
+  6. 
+.     * letter period in and out of PGE by bin
+.         gen _T1k_let_`b' = period == "PostLetter" & bin1k == `b'
+  7.         label var _T1k_let_`b' "PostLetter-`b'ft"
+  8.         
+. }
+
+. 
+. 
+. /* Road bins by period-territory */
+. capture drop rbin _RB* 
+
+. global blist 2000 1000
+
+. gen rbin = 9999
+
+. gen ft_to_roads = 3280.84*km_to_roads
+
+. foreach b in $blist {
+  2.         replace rbin = `b' if ft_to_roads < `b'
+  3. }
+(327,984 real changes made)
+(157,201 real changes made)
+
+. 
+. foreach b in $blist {
+  2.     * main effect in and out of PGE by road bin
+.         gen _RB_bin_`b' = rbin == `b'
+  3.         label var _RB_bin_`b' "Hwy `b'ft"
+  4. 
+.     * explosion period by road bin
+.         gen _RB_exp_`b' = period == "PostExp" & rbin == `b'
+  5.         label var _RB_exp_`b' "PostExp- hwy `b'ft"
+  6. 
+.     * letter period by road bin
+.         gen _RB_let_`b' = period == "PostLetter" & rbin == `b'
+  7.         label var _RB_let_`b' "PostLetter-hwy `b'ft"
+  8.         
+. }
+
+. 
+. 
+. 
+end of do-file
+
+. gen _T2k__2k = (bin1k == 1000 | bin1k == 2000)
+
+. 
+. /* Show covariate support of sample */
+. 
+. summ price rbaths bedrooms pool garage ft_to_roads n_foreclose_pre6 
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       price |    924,500    465383.2    318243.7   18396.64    3400556
+      rbaths |    924,500    2.051844    .8043875          0          5
+    bedrooms |    924,500    2.910301    1.030778          0          5
+        pool |    924,500    .3979448    1.319282          0          5
+      garage |    924,500    37.08614    45.51925          1         99
+-------------+---------------------------------------------------------
+ ft_to_roads |    924,500    4161.656    3968.939   .0217315   40950.15
+n_foreclos~6 |    924,500    11.86873    13.56739          0        149
+
+. 
+. twoway (histogram bedrooms if _T2k__2k ==1, start(0) width(1) color(gray)) ///
+>        (histogram bedrooms if _T2k__2k ==0, start(0) width(1) ///
+>            fcolor(none) lcolor(black)), legend(order(1 "0-2000 ft." 2 "> 2000 ft." )) name(bedrooms, replace) xlabel(0(1)5) xtitle("Bedrooms", height(4)) title("Number of Bedrooms") scheme(s1mono)
+
+. 
+. twoway (histogram rbaths if _T2k__2k ==1, start(0) width(1) color(gray)) ///
+>        (histogram rbaths if _T2k__2k ==0, start(0) width(1) ///
+>            fcolor(none) lcolor(black)), legend(order(1 "0-2000 ft." 2 "> 2000 ft." )) name(rbaths, replace) xlabel(0(1)5) xtitle("Bedrooms", height(4)) title("Number of Bathrooms") scheme(s1mono)
+
+. 
+. twoway (histogram lnsqft if _T2k__2k ==1, start(5) width(0.25) color(gray)) ///
+>        (histogram lnsqft if _T2k__2k ==0, start(5) width(0.25) ///
+>            fcolor(none) lcolor(black)), legend(order(1 "0-2000 ft." 2 "> 2000 ft." )) name(lnsqft, replace) xlabel(5(1)9) xtitle("Log Square Footage", height(4)) title("Log Square Footage") scheme(s1mono)
+
+. 
+. gen sa_yr_blt_1920 = max(sa_yr_blt,1920)
+
+. twoway (histogram sa_yr_blt_1920 if _T2k__2k ==1, start(1920) width(10) color(gray)) ///
+>        (histogram sa_yr_blt_1920 if _T2k__2k ==0, start(1920) width(10) ///
+>            fcolor(none) lcolor(black)), legend(order(1 "0-2000 ft." 2 "> 2000 ft." )) name(sa_yr_blt, replace) xlabel(1920(20)2010) xtitle("Year Built", height(4)) title("Year Built") scheme(s1mono)
+
+. 
+. /*
+> gen ft_to_roads_10k = min(ft_to_roads,10000)
+> twoway (histogram ft_to_roads_10k if _T2k__2k ==1, start(0) width(2000) color(gray)) ///
+>        (histogram ft_to_roads_10k if _T2k__2k ==0, start(0) width(2000) ///
+>            fcolor(none) lcolor(black)), legend(order(1 "0-2000 ft." 2 "> 2000 ft." )) name(ft_to_roads, replace) xlabel(0(1000)10) xtitle("Distance in feet", height(4)) title("Nearest highway") scheme(s1mono)
+> 
+> gen n_foreclose_pre6_100 = min(n_foreclose_pre6,100)
+> twoway (histogram n_foreclose_pre6_100 if _T2k__2k ==1, start(0) width(5) color(gray)) ///
+>        (histogram n_foreclose_pre6_100 if _T2k__2k ==0, start(0) width(5) ///
+>            fcolor(none) lcolor(black)), legend(order(1 "0-2000 ft." 2 "> 2000 ft." )) name(n_foreclose_pre6, replace) xlabel(0(20)100) xtitle("Foreclosures", height(4)) title("Nearby foreclosures last 6 mo.") scheme(s1mono)
+> */
+. 
+. graph combine bedrooms rbaths lnsqft sa_yr_blt,  scheme(s1mono)
+
+. graph export "$ddir/output/overlap_bw.eps", as(eps) replace
+(note: file /home/sweeneri/Projects/Pipelines/DraftFiles/output/overlap_bw.eps not found)
+(file /home/sweeneri/Projects/Pipelines/DraftFiles/output/overlap_bw.eps written in EPS format)
+
+. graph export "$ddir/output/overlap_bw.png", as(png) replace
+(file /home/sweeneri/Projects/Pipelines/DraftFiles/output/overlap_bw.png written in PNG format)
+
+. 
+end of do-file
+
+. do "/scratch/sweeneri/SD07775.000000"
+
+. 
+. gr close _all
+
+. 
+. * Covariate tables
+. label var _T2k__2k "Within 2000 ft."
+
+. label var rbaths "Bathrooms"
+
+. label var _Xpool "Pool"
+
+. label var _Xgarage "Garage"
+
+. label var sa_sqft "Square feet"
+
+. label var sa_yr_blt "Year built"
+
+. 
+. estimates clear
+
+. eststo clear
+
+. 
+. local i = `i' + 1
+
+. foreach v of varlist bedrooms rbaths _Xpool _Xgarage sa_sqft sa_yr_blt {
+  2.         summ `v'
+  3.         sca def mean`v' = r(mean)
+  4.         areg `v' _T2k__2k, absorb(census_tract)
+  5.                 estimates store m`i'
+  6.                 estadd scalar mean = mean`v'
+  7.         local i = `i' + 1
+  8.         }
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    bedrooms |    924,500    2.910301    1.030778          0          5
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   1, 922621)   =    1361.22
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.3400
+                                                Adj R-squared     =     0.3386
+                                                Root MSE          =     0.8383
+
+------------------------------------------------------------------------------
+    bedrooms |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+    _T2k__2k |  -.0829412   .0022481   -36.89   0.000    -.0873473   -.0785351
+       _cons |   2.959149   .0015853  1866.66   0.000     2.956042    2.962257
+-------------+----------------------------------------------------------------
+census_tract |   F(1877, 922621) =    249.706   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  2.9103007
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+      rbaths |    924,500    2.051844    .8043875          0          5
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   1, 922621)   =     985.31
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.2855
+                                                Adj R-squared     =     0.2840
+                                                Root MSE          =     0.6806
+
+------------------------------------------------------------------------------
+      rbaths |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+    _T2k__2k |   -.057295   .0018253   -31.39   0.000    -.0608725   -.0537175
+       _cons |   2.085588   .0012871  1620.33   0.000     2.083066    2.088111
+-------------+----------------------------------------------------------------
+census_tract |   F(1877, 922621) =    194.866   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  2.0518442
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+      _Xpool |    924,500    .0881947     .283578          0          1
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   1, 922621)   =     192.59
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.1316
+                                                Adj R-squared     =     0.1299
+                                                Root MSE          =     0.2645
+
+------------------------------------------------------------------------------
+      _Xpool |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+    _T2k__2k |  -.0098447   .0007094   -13.88   0.000    -.0112351   -.0084543
+       _cons |   .0939928   .0005002   187.89   0.000     .0930123    .0949733
+-------------+----------------------------------------------------------------
+census_tract |   F(1877, 922621) =     74.141   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  .0881947
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    _Xgarage |    924,500    .6492244    .4772131          0          1
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   1, 922621)   =     332.01
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6877
+                                                Adj R-squared     =     0.6871
+                                                Root MSE          =     0.2670
+
+------------------------------------------------------------------------------
+    _Xgarage |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+    _T2k__2k |  -.0130446   .0007159   -18.22   0.000    -.0144478   -.0116414
+       _cons |   .6569071   .0005048  1301.22   0.000     .6559177    .6578966
+-------------+----------------------------------------------------------------
+census_tract |   F(1877, 922621) =   1075.736   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  .64922445
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     sa_sqft |    924,500    1537.339    611.4114        250       9984
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   1, 922621)   =    1681.15
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.2871
+                                                Adj R-squared     =     0.2857
+                                                Root MSE          =   516.7527
+
+------------------------------------------------------------------------------
+     sa_sqft |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+    _T2k__2k |  -56.82096   1.385813   -41.00   0.000    -59.53711   -54.10482
+       _cons |   1570.804    .977239  1607.39   0.000     1568.889    1572.719
+-------------+----------------------------------------------------------------
+census_tract |   F(1877, 922621) =    195.033   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  1537.3389
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+   sa_yr_blt |    924,500    1968.685    23.88677       1800       2011
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   1, 922621)   =      61.16
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5792
+                                                Adj R-squared     =     0.5783
+                                                Root MSE          =    15.5115
+
+------------------------------------------------------------------------------
+   sa_yr_blt |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+    _T2k__2k |  -.3253291   .0415984    -7.82   0.000    -.4068606   -.2437976
+       _cons |   1968.877   .0293341  6.7e+04   0.000     1968.819    1968.934
+-------------+----------------------------------------------------------------
+census_tract |   F(1877, 922621) =    675.955   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  1968.6852
+
+.         
+. esttab m*, label se starlevels(* 0.10 ** 0.05 *** 0.01)  ///
+> b(a2) keep(_T2k__2k) ///
+> nonotes addnotes("All models contain census tract FE") ///
+> mtitles("Beds" "Baths" "Pool" "Garage" "Sq. Ft." "Yr. Blt.") ///
+> stats(mean, label("Dep. var. mean"))
+
+--------------------------------------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)             (5)             (6)   
+                             Beds           Baths            Pool          Garage         Sq. Ft.        Yr. Blt.   
+--------------------------------------------------------------------------------------------------------------------
+Within 2000 ft.            -0.083***       -0.057***      -0.0098***       -0.013***        -56.8***        -0.33***
+                         (0.0022)        (0.0018)       (0.00071)       (0.00072)          (1.39)         (0.042)   
+--------------------------------------------------------------------------------------------------------------------
+Dep. var. mean               2.91            2.05           0.088            0.65          1537.3          1968.7   
+--------------------------------------------------------------------------------------------------------------------
+All models contain census tract FE
+
+. 
+. esttab  m* using "$ddir/output/pdd_sample_diffs_2k.tex", replace se starlevels(* 0.10 ** 0.05 *** 0.01)  ///
+> keep(_T2k__2k) label ///
+> b(a2) nonotes booktabs ///
+> mtitles("Beds" "Baths" "Pool" "Garage" "Sq. Ft." "Yr. Blt.") ///
+> stats(mean, label("Mean"))
+(output written to /home/sweeneri/Projects/Pipelines/DraftFiles/output/pdd_sample_diffs_2k.tex)
+
+. 
+. estimates clear
+
+. eststo clear
+
+. 
+. local i = `i' + 1
+
+. foreach v of varlist bedrooms rbaths _Xpool _Xgarage sa_sqft sa_yr_blt {
+  2.         summ `v'
+  3.         sca def mean`v' = r(mean)
+  4.         areg `v' _T1k_bin_1000 _T1k_bin_2000, absorb(census_tract)
+  5.                 estimates store m`i'
+  6.                 estadd scalar mean = mean`v'
+  7.         local i = `i' + 1
+  8.         }
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    bedrooms |    924,500    2.910301    1.030778          0          5
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   2, 922620)   =     993.44
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.3404
+                                                Adj R-squared     =     0.3391
+                                                Root MSE          =     0.8380
+
+-------------------------------------------------------------------------------
+     bedrooms |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+--------------+----------------------------------------------------------------
+_T1k_bin_1000 |  -.1188906   .0026681   -44.56   0.000      -.12412   -.1136611
+_T1k_bin_2000 |   -.057539   .0024664   -23.33   0.000    -.0623731   -.0527049
+        _cons |   2.963267   .0015933  1859.87   0.000     2.960144    2.966389
+--------------+----------------------------------------------------------------
+ census_tract |   F(1877, 922620) =    249.229   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  2.9103007
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+      rbaths |    924,500    2.051844    .8043875          0          5
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   2, 922620)   =     617.91
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.2857
+                                                Adj R-squared     =     0.2842
+                                                Root MSE          =     0.6805
+
+-------------------------------------------------------------------------------
+       rbaths |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+--------------+----------------------------------------------------------------
+_T1k_bin_1000 |  -.0757722   .0021668   -34.97   0.000    -.0800191   -.0715253
+_T1k_bin_2000 |  -.0442388    .002003   -22.09   0.000    -.0481645    -.040313
+        _cons |   2.087705   .0012939  1613.50   0.000     2.085169    2.090241
+--------------+----------------------------------------------------------------
+ census_tract |   F(1877, 922620) =    194.781   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  2.0518442
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+      _Xpool |    924,500    .0881947     .283578          0          1
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   2, 922620)   =     215.11
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.1318
+                                                Adj R-squared     =     0.1301
+                                                Root MSE          =     0.2645
+
+-------------------------------------------------------------------------------
+       _Xpool |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+--------------+----------------------------------------------------------------
+_T1k_bin_1000 |  -.0168419   .0008421   -20.00   0.000    -.0184924   -.0151913
+_T1k_bin_2000 |  -.0049004   .0007785    -6.30   0.000    -.0064262   -.0033747
+        _cons |   .0947942   .0005029   188.50   0.000     .0938086    .0957798
+--------------+----------------------------------------------------------------
+ census_tract |   F(1877, 922620) =     74.019   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  .0881947
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    _Xgarage |    924,500    .6492244    .4772131          0          1
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   2, 922620)   =     364.56
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.6878
+                                                Adj R-squared     =     0.6872
+                                                Root MSE          =     0.2669
+
+-------------------------------------------------------------------------------
+     _Xgarage |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+--------------+----------------------------------------------------------------
+_T1k_bin_1000 |  -.0221715   .0008498   -26.09   0.000     -.023837   -.0205059
+_T1k_bin_2000 |  -.0065954   .0007855    -8.40   0.000    -.0081351   -.0050558
+        _cons |   .6579524   .0005074  1296.59   0.000     .6569579     .658947
+--------------+----------------------------------------------------------------
+ census_tract |   F(1877, 922620) =   1074.165   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  .64922445
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     sa_sqft |    924,500    1537.339    611.4114        250       9984
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   2, 922620)   =    1194.81
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.2877
+                                                Adj R-squared     =     0.2862
+                                                Root MSE          =   516.5551
+
+-------------------------------------------------------------------------------
+      sa_sqft |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+--------------+----------------------------------------------------------------
+_T1k_bin_1000 |  -80.39785     1.6447   -48.88   0.000     -83.6214   -77.17429
+_T1k_bin_2000 |  -40.16127   1.520353   -26.42   0.000    -43.14111   -37.18143
+        _cons |   1573.504   .9821283  1602.14   0.000     1571.579    1575.429
+--------------+----------------------------------------------------------------
+ census_tract |   F(1877, 922620) =    195.121   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  1537.3389
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+   sa_yr_blt |    924,500    1968.685    23.88677       1800       2011
+
+Linear regression, absorbing indicators         Number of obs     =    924,500
+                                                F(   2, 922620)   =      41.96
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5792
+                                                Adj R-squared     =     0.5783
+                                                Root MSE          =    15.5114
+
+-------------------------------------------------------------------------------
+    sa_yr_blt |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+--------------+----------------------------------------------------------------
+_T1k_bin_1000 |  -.1983372   .0493878    -4.02   0.000    -.2951357   -.1015388
+_T1k_bin_2000 |   -.415063   .0456539    -9.09   0.000    -.5045431    -.325583
+        _cons |   1968.862   .0294918  6.7e+04   0.000     1968.804     1968.92
+--------------+----------------------------------------------------------------
+ census_tract |   F(1877, 922620) =    675.915   0.000        (1878 categories)
+
+added scalar:
+               e(mean) =  1968.6852
+
+. 
+. esttab m*, label se starlevels(* 0.10 ** 0.05 *** 0.01)  ///
+> b(a2) keep(_T1k_bin_1000 _T1k_bin_2000) ///
+> nonotes addnotes("All models contain census tract FE") ///
+> mtitles("Beds" "Baths" "Pool" "Garage" "Sq. Ft." "Yr. Blt.") ///
+> stats(mean, label("Dep. var. mean"))
+
+--------------------------------------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)             (5)             (6)   
+                             Beds           Baths            Pool          Garage         Sq. Ft.        Yr. Blt.   
+--------------------------------------------------------------------------------------------------------------------
+1000ft                      -0.12***       -0.076***       -0.017***       -0.022***        -80.4***        -0.20***
+                         (0.0027)        (0.0022)       (0.00084)       (0.00085)          (1.64)         (0.049)   
+
+2000ft                     -0.058***       -0.044***      -0.0049***      -0.0066***        -40.2***        -0.42***
+                         (0.0025)        (0.0020)       (0.00078)       (0.00079)          (1.52)         (0.046)   
+--------------------------------------------------------------------------------------------------------------------
+Dep. var. mean               2.91            2.05           0.088            0.65          1537.3          1968.7   
+--------------------------------------------------------------------------------------------------------------------
+All models contain census tract FE
+
+. 
+. esttab  m* using "$ddir/output/pdd_sample_diffs_1k.tex", replace se starlevels(* 0.10 ** 0.05 *** 0.01)  ///
+> keep(_T1k_bin_1000 _T1k_bin_2000)  label ///
+> b(a2) nonotes booktabs stats(mean, label("Mean")) ///
+> mtitles("Beds" "Baths" "Pool" "Garage" "Sq. Ft." "Yr. Blt.")
+(output written to /home/sweeneri/Projects/Pipelines/DraftFiles/output/pdd_sample_diffs_1k.tex)
+
+. 
+. * Counts by bin
+. label def binlbl 1000 "0-1000" 2000 "1000-2000" 9999 "2000-4000", replace
+
+. label val bin1k binlbl
+
+. 
+. replace period = "Post-crash" if period == "PostCrash"
+(64,122 real changes made)
+
+. replace period = "Post-exp." if period == "PostExp"
+(28,800 real changes made)
+
+. replace period = "Post-letter" if period == "PostLetter"
+variable period was str10 now str11
+(52,204 real changes made)
+
+. 
+. tabout period bin1k using "$ddir/output/pdd_sample_freq.tex", ///
+>         cells(freq) format(0c) clab(_ _ _) replace ///
+>         style(tex) bt font(bold) topstr(10cm) ///
+>         topf($adir/code/top.tex) botf($adir/code/bot.tex)
+
+File /code/top.tex not found.
+Check and retype file specification.
+
+
+. 
+. * T-test
+. /* COMPARISON OF PROJECT CHARACTERISTICS */
+. gen distress_dummy = (distress_indicator != 0)
+
+. 
+. global vlist price bedrooms rbaths _Xpool _Xgarage sa_sqft sa_yr_blt distress_dummy salenum
+
+. global rnames "Sale Price" "Bedrooms" "Baths" "Pool" "Garage" "Sq. Ft." "Year Built" "Distress" "Obs."
+
+. 
+. *COMPARE 1000k to 2000k to 2000-4000k using t-test and Todd's table code
+. quietly{
+Obs:  operator invalid
+r(198);
+
+end of do-file
+
+r(198);
+
+. do "/scratch/sweeneri/SD07775.000000"
+
+. 
+. * T-test
+. /* COMPARISON OF PROJECT CHARACTERISTICS */
+. global vlist price bedrooms rbaths _Xpool _Xgarage sa_sqft distress_dummy
+
+. global rnames "Sale Price" "Bedrooms" "Baths" "Pool" "Garage" "Sq. Ft." "Distress"
+
+. 
+. *COMPARE 1000k to 2000k to 2000-4000k using t-test and Todd's table code
+. quietly{
+variable tgroup already defined
+r(110);
+
+end of do-file
+
+r(110);
+
+. drop tgroup
+
+. do "/scratch/sweeneri/SD07775.000000"
+
+. 
+. * T-test
+. /* COMPARISON OF PROJECT CHARACTERISTICS */
+. global vlist price bedrooms rbaths _Xpool _Xgarage sa_sqft distress_dummy
+
+. global rnames "Sale Price" "Bedrooms" "Baths" "Pool" "Garage" "Sq. Ft." "Distress"
+
+. 
+. *COMPARE 1000k to 2000k to 2000-4000k using t-test and Todd's table code
+. quietly{
+
+. 
+. frmttable using "$ddir/output/pdd_ttests.tex", statmat(T) varlabels replace ///
+>         ctitle("", "> 2000" , 0-1000 , Diff., "(p-val)",1000-2000, Diff., "(p-val)") ///
+>     hlines(11{0}1) spacebef(1{0}1) frag tex ///
+>         sdec(0,0,0,3,0,0,3 \ 1,1,1,3,1,1,3 \ 1,1,1,3,1,1,3 \ 2,2,2,3,2,2,3 \ 2,2,2,3,2,2,3 \ 0,0,0,3,0,0,3 \ ///
+>          2,2,2,3,2,2,3)
+(note: file /home/sweeneri/Projects/Pipelines/DraftFiles/output/pdd_ttests.tex not found)
+                                                                                         -----------------------------------------------------------------------------
+                                                                                                       > 2000   0-1000   Diff.   (p-val)  1000-2000  Diff.   (p-val) 
+                                                                                         -----------------------------------------------------------------------------
+                                                                                          Sale Price   469,460  463,630  -5,830   0.000    461,316   -8,144   0.000  
+                                                                                          Bedrooms       3.0      2.8     -0.2    0.000      2.9      -0.1    0.000  
+                                                                                          Baths          2.1      2.0     -0.1    0.000      2.0      -0.1    0.000  
+                                                                                          Pool          0.10     0.07    -0.02    0.000     0.09     -0.01    0.000  
+                                                                                          Garage        0.69     0.60    -0.09    0.000     0.65     -0.04    0.000  
+                                                                                          Sq. Ft.       1,585    1,485    -100    0.000     1,525     -60     0.000  
+                                                                                          Distress      0.32     0.32    -0.00    0.243     0.32      0.00    0.427  
+                                                                                         -----------------------------------------------------------------------------
+
+
+. 
+. 
+. capture log close

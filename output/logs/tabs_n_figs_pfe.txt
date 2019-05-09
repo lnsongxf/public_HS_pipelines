@@ -1,0 +1,186 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /home/sweeneri/Projects/Pipelines/DraftFiles/output/logs/tabs_n_fi
+> gs_pfe.txt
+  log type:  text
+ opened on:  13 Nov 2017, 15:28:42
+
+. set linesize 255
+
+. 
+. /*COMBINE ESTIMATES FROM DIFFERENT FILES TO CREATE TABLES */
+. 
+. *%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+. * COMPARE DIFFERENT TIME FE'S WITH 2K BIN
+. 
+. use if random_id < 0.01 using $ddir/generated_data/dd_regdata, clear
+
+. *NEED TO REASSIGN LABELS FOR ESTOUT
+. capture drop _T* PGE
+
+. do $ddir/analysis/pdd_prep_distance_defs_pfe.do
+
+. *define this in a separate do file so i can rerun the same code 
+. *after droping distribution lines in other files
+. 
+. gen PGEpipe = cond(km_to_ng == km_to_anyPGEng,1,0)
+
+. gen PGEterr = (gasutility == "PGE")
+
+. * Note: in current approach, all PGE pipe is in PGE territory, but there are some houses closest to non-PGE pipe
+. * That is PGEpipe == 1 => PGEterr == 1 but not the converse
+. 
+. replace period = "PostCrash" if period == "Pre" & sr_date_transfer > (td(09sept2010) - 450)
+(0 real changes made)
+
+. 
+. /*NAMING CONVENTION
+> _T*_PERIOD_DISTANCE_PGE
+> T - DENOTES HOW DISTANCE IS SPECIFIED (IE 2K OR 660 FOOT BINS)
+> 
+> - SO TO RUN WITH PROPERTY FES, SPECIFY _T*_EXP AND _T*_LET
+> ---- FOR CROSS SECTION, ONLY NEED _T*
+> */
+. 
+. *1000 FOOT BIN REG SETUP
+. cap drop bin1k 
+
+. cap drop _T1k* 
+
+. global blist 2000 1000
+
+. gen bin1k = 9999
+
+. foreach b in $blist {
+  2.         replace bin1k = `b' if ft_to_ng < `b'
+  3. }
+(26,431 real changes made)
+(14,385 real changes made)
+
+. 
+. * Period main effect (mostly picked up by month FE?)
+. gen _T1k_pre = period == "Pre"
+
+. label var _T1k_pre "Pre"
+
+. gen _T1k_exp = period == "PostExp"
+
+. label var _T1k_exp "SanBruno"
+
+. gen _T1k_let = period == "PostLetter"
+
+. label var _T1k_let "Letter"
+
+. 
+. * Bin-related variables
+. foreach b in $blist {
+  2.     * main effect in and out of PGE by bin
+.         gen _T1k_bin_`b' = bin1k == `b'
+  3.         label var _T1k_bin_`b' "`b'ft"
+  4. 
+.     * explosion period by bin
+.         gen _T1k_pre_`b' = period == "Pre" & bin1k == `b'
+  5.         label var _T1k_pre_`b' "Pre-`b'ft"
+  6. 
+.     * explosion period by bin
+.         gen _T1k_exp_`b' = period == "PostExp" & bin1k == `b'
+  7.         label var _T1k_exp_`b' "PostExp-`b'ft"
+  8. 
+.     * letter period in and out of PGE by bin
+.         gen _T1k_let_`b' = period == "PostLetter" & bin1k == `b'
+  9.         label var _T1k_let_`b' "PostLetter-`b'ft"
+ 10.         
+. }
+
+. 
+. 
+. 
+end of do-file
+
+.  
+. *MAKE SAME TABLE WITH 1000 FOOT BINS
+. eststo clear
+
+. estimates clear
+
+. local r = 1
+
+. local cols = ""
+
+. 
+. estimates use "$Edir/pdd_PGE_pfe_1k_Tr"
+
+.         estimates store m`r'
+
+.     local cols = "`cols' m`r'"
+
+.     local r = `r' + 1
+
+. estimates use "$Edir/pdd_PGE_pfe_1k_P"
+
+.         estimates store m`r'
+
+.     local cols = "`cols' m`r'"
+
+.     local r = `r' + 1
+
+. estimates use "$Edir/pdd_PGE_pfe_1k_TrPer"
+
+.         estimates store m`r'
+
+.     local cols = "`cols' m`r'"
+
+.     local r = `r' + 1
+
+. estimates use "$Edir/pdd_PGE_pfe_1k_PTrPer"
+
+.         estimates store m`r'
+
+.     local cols = "`cols' m`r'"
+
+.     local r = `r' + 1
+
+. 
+. global klist _T1k_exp_1000 _T1k_exp_2000  ///
+>              _T1k_let_1000 _T1k_let_2000 
+
+. 
+. esttab `cols', keep($klist) order($klist) label se starlevels(* 0.10 ** 0.05 *** 0.01)  ///
+> stats(pfes tfes N r2,  ///
+> labels("Property FE" "Other FE" "Observations" "R-Squared")) ///
+> b(a3)  ///
+> nonotes addnotes("All models contain year-month fe's") ///
+> nomtitles
+
+------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)   
+------------------------------------------------------------------------------------
+PostExp-1000ft           -0.00138         0.00403        -0.00916        -0.00279   
+                        (0.00723)       (0.00891)       (0.00757)       (0.00889)   
+
+PostExp-2000ft            0.00270         0.00295         0.00173         0.00718   
+                        (0.00675)       (0.00839)       (0.00666)       (0.00799)   
+
+PostLetter-1000ft          0.0104         0.00743        -0.00684        -0.00740   
+                        (0.00690)       (0.00829)       (0.00628)       (0.00677)   
+
+PostLetter-2000ft         0.00139         0.00366        -0.00508        0.000230   
+                        (0.00631)       (0.00755)       (0.00572)       (0.00645)   
+------------------------------------------------------------------------------------
+Property FE                     N               Y               N               Y   
+Other FE                       Tr                          Tr-Per          Tr-Per   
+Observations               509859          509859          509487          509243   
+R-Squared                   0.863           0.934           0.882           0.948   
+------------------------------------------------------------------------------------
+All models contain year-month fe's
+
+. 
+. esttab  `cols' using "$ddir/output/pdd_PGE_pfe_1k.tex", replace se starlevels(* 0.10 ** 0.05 *** 0.01)  ///
+> keep($klist) order($klist)  label ///
+> stats(pfes tfes N r2,  ///
+> labels("Property FE" "Other FE" "Observations" "R-Squared")) ///
+> b(a3) nonotes booktabs nomtitles
+(output written to /home/sweeneri/Projects/Pipelines/DraftFiles/output/pdd_PGE_pfe_1k.tex)
+
+. 
+. capture log close

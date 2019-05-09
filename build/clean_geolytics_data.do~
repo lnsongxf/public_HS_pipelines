@@ -1,0 +1,94 @@
+set seed 123456
+global fname clean_geolytics_data 
+
+global bdir "/home/sweeneri/Projects/Pipelines/build"
+global adir "/home/sweeneri/Projects/Pipelines/analysis"
+
+cd "$adir/temp"
+
+capture log close
+log using "$adir/output/BayArea_DD_KeepDistrib/stata_logs/${fname}_${S_DATE}.txt", replace text
+set linesize 255
+
+*merge in geolytics data
+use $adir/input/Geolytics_clean_all_years.dta, clear
+format areakey %11.0f
+/*geolytics data is by tract. 
+area key is defined as state_fips (no leading zero)| county fips (3 digits) | tractid (6 digits) */
+
+tostring areakey, gen(ta) format(%11.0f)
+gen te = length(ta)
+gen tract_id = substr(ta,5,6)
+replace tract_id = substr(ta,6,6) if te == 11
+destring tract_id, replace
+
+rename county county_id
+keep if state == 6
+
+
+gen share_rent = rntocc/(rntocc+ownocc)
+
+gen share_nonwhite_tot = 1 - (totoccw / occhu)
+
+gen share_nonwhite_occ= 1 - (ownoccw / ownocc)
+
+gen share_hs = (educ11 + educ12 + educ15 + educ16) / educpp 
+gen share_college = (educ16) / educpp 
+
+rename kids share_kidsU5
+
+gen share_pubassist = avpblad/occhu
+
+sum share_pu, detail
+
+gen pop_density = trctpop/arealand
+
+global glvars md* avgern car trctpop occhu ownocc pop_density share* 
+
+foreach v of varlist $glvars {
+	replace `v' = . if `v'  < 0
+}
+
+
+rename year gl_year
+keep county_id tract_id  $glvars gl_year
+foreach v of varlist $glvars {
+	rename `v' gl_`v'
+}
+save $bdir/output/geolyitcsdata, replace
+
+
+/*
+note: THIS DATA SET CONTAINS ALL CENSUS YEARS. BUT SOME VARIABLES ARE NOT COMPARABLE WITH THE 2010 ACS
+-income 
+	- in acs in 2010
+	- prior to 1990, only avg avgern
+*/
+
+
+use $bdir/output/geolyitcsdata, clear
+keep if gl_year == "2010"
+drop gl*
+save tempdat, replace
+
+use $bdir/output/geolyitcsdata, clear
+keep if gl_year == "2010" 
+keep county_id tract_id gl_trctpop gl_share_kidsU5 gl_occhu gl_ownocc gl_share_rent ///
+	gl_share_nonwhite_tot gl_share_nonwhite_occ gl_pop_density
+merge 1:1 county_id tract_id using tempdat, nogen 
+save tempdat, replace
+
+use $bdir/output/geolyitcsdata, clear
+keep if gl_year == "2010ACS" 
+keep county_id tract_id gl_avgern gl_car gl_mdfamy gl_mdhhy gl_share_hs ///
+	gl_share_college gl_share_pubassist gl_povrat gl_shrfor
+merge 1:1 county_id tract_id using tempdat, nogen 
+save $bdir/output/geolyitcsdata_2010chars, replace
+
+exit
+
+use $adir/output/dd_regdata if year > 2008, clear
+merge m:1 county_id tract_id using $bdir/output/geolyitcsdata_2010chars, keep(match master)
+gen flag_ingeo = cond(_merge == 3,1,0)
+drop _merge
+

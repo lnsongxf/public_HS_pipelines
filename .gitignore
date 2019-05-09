@@ -1,0 +1,14 @@
+**.directory
+**.dta
+**.lyx~
+**.lyx#
+temp/
+generated_data/
+*synctex.gz
+**HS_Pipelines.log
+**.aux
+**.bbl
+**.blg
+**.run.xml
+**-blx.bib 
+kill_repo_history.bat 

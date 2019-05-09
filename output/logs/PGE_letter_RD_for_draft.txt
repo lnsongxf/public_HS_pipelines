@@ -1,0 +1,188 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /home/sweeneri/Projects/Pipelines/DraftFiles/output/logs/PGE_lette
+> r_RD_for_draft.txt
+  log type:  text
+ opened on:  13 Nov 2017, 12:29:30
+
+. set linesize 255
+
+. 
+. global hedonics "lnsqft _X*"
+
+. 
+. /**************************************************************
+> PGE RD
+> **************************************************************/
+. global outdir "$ddir/output"
+
+. 
+. **SELECT DATA
+. ** only using post crash obs for controls
+. use if insample == 1 & random_id < 1.01 using $ddir/generated_data/dd_regdata, clear 
+
+. keep if gasutility == "PGE" & sr_date_transfer >= td(01jun2009)
+(3,679,872 observations deleted)
+
+. 
+. 
+. *CREATE PERIODS TO DO RD WITHIN
+. gen per_letter = sr_date_transfer >= td(20apr2011) 
+
+. gen per_letter_summer = sr_date_transfer >= td(01jun2011) & sr_date_transfer <= td(09sept2011) 
+
+. gen per_exp = sr_date_transfer < td(20apr2011) & sr_date_transfer >= td(09sept2010) 
+
+. gen per_pre_summer = sr_date_transfer < td(09sept2010) & sr_date_transfer >= td(01jun2010)
+
+. gen per_pre = sr_date_transfer < td(09sept2010) & sr_date_transfer >= td(09sept2009)
+
+. 
+. *DROP DISTRIBUTION LINES
+. ** NOTE: COULD RESTRICT JUST TO PGE LINES
+. replace ft_to_ng = ft_to_ng_nodistr
+(47,420 real changes made)
+
+. *replace ft_to_ng = ft_to_ng_nodistr_pge
+. foreach v of varlist ft_* {
+  2.         replace `v' = `v' / 1000
+  3. }
+(234,459 real changes made)
+(234,459 real changes made)
+(234,459 real changes made)
+(234,459 real changes made)
+
+. 
+. *center distance measure at the letter cuttoff 
+. gen dist = (ft_to_ng - 2)
+
+. 
+. gen noletter = cond(dist >0,1,0) // DEFINE IT THIS WAY SO IT MATCHES THE PREPACKED RD PROGRAM OUTPUTS
+
+. gen dist_above = dist*noletter
+
+. gen dist_2 = dist^2
+
+. gen dist_above_2 = dist_above^2
+
+. 
+. gen RD_Estimate = -noletter //*THIS WILL HAVE THE OPPOSITE SIGN OF WHAT COMES OUT OF RDROBUST
+
+. *NOTE: THIS MEANS THAT WE EXPECT A POSITIVE COEFFICIENT IF THE LETTER HAD AN EFFECT IN RDROBUST
+. 
+. gen price_sf = price/sa_sqft
+
+. save regdat, replace
+file regdat.dta saved
+
+. 
+. 
+. /* FOR DRAFT ***/
+. 
+. 
+. use regdat, clear
+
+. keep if period== "PostLetter"
+(151,200 observations deleted)
+
+. gen inrd =0
+
+. global xvars i.bedrooms i.rbaths i.distress_indicator km_to_roads  lnsqft
+
+. 
+. 
+. global hedonics "lnsqft _X* _Dage_bin* _Duse*"
+
+. global extracovars "_RB* ln_foreclose"
+
+. 
+. global xvars $hedonics 
+
+. 
+. *main spec, 1000 ft, no donut 
+. replace inrd = abs(dist) < 1 & abs(dist) > .00 // & distress_indicator==0
+(26,309 real changes made)
+
+. 
+. 
+. rdplot lnprice dist if inrd, ci(95) shade graph_options(title() ytitle("ln(price)"))
+
+RD Plot with evenly spaced mimicking variance number of bins using spacings estimators.
+
+         Cutoff c = 0 | Left of c  Right of c               Number of obs  =      26309
+----------------------+----------------------               Kernel         =    Uniform
+        Number of obs |     14419       11890
+   Eff. Number of obs |     14419       11890
+  Order poly. fit (p) |         4           4
+     BW poly. fit (h) |     1.000       1.000
+ Number of bins scale |     1.000       1.000
+
+Outcome: lnprice. Running variable: dist.
+------------------------------------------------------
+                            |   Left of c   Right of c
+----------------------------+-------------------------
+    Selected number of bins |         253          249
+                 Bin length |       0.004        0.004
+----------------------------+-------------------------
+          IMSE-optimal bins |           4            3
+    Mimicking Variance bins |         253          249
+----------------------------+-------------------------
+Relative to IMSE-optimal:   | 
+              Implied scale |      63.250       83.000
+      WIMSE variance weight |       0.000        0.000
+          WIMSE bias weight |       1.000        1.000
+------------------------------------------------------
+
+
+. *rdplot lnprice dist if abs(dist) < .5 & abs(dist) > .00 , ci(95) shade graph_options(title(RD Plot) ytitle("ln(price)"))
+. 
+. graph export "$outdir/rdplot_pge_lnprice.eps", replace
+(note: file /home/sweeneri/Projects/Pipelines/DraftFiles/output/rdplot_pge_lnprice.eps not found)
+(file /home/sweeneri/Projects/Pipelines/DraftFiles/output/rdplot_pge_lnprice.eps written in EPS format)
+
+. *graph export "$outdir/rdplot_pge_lnprice.png", replace
+. 
+. eststo clear
+
+. 
+. qui{
+
+. esttab, keep(RD*) label se starlevels(* 0.10 ** 0.05 *** 0.01) nomtitle ///
+>         stats(bw covars FEs N,  ///
+>         labels("Bandwidth" "Hedonics" "TractFEs" "Observations" )) ///
+>         b(a3) 
+
+------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)   
+------------------------------------------------------------------------------------
+RD_Estimate               0.00206         0.00902        -0.00851          0.0146   
+                         (0.0195)       (0.00869)       (0.00586)        (0.0119)   
+------------------------------------------------------------------------------------
+Bandwidth                 1000 ft         1000 ft         1000 ft          500 ft   
+Hedonics                                                        X                   
+TractFEs                                        X               X               X   
+Observations                26309           26309           26309           13069   
+------------------------------------------------------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+.         
+. esttab using "$outdir/rd_linear_pge_letter.tex", ///
+>         replace se starlevels(* 0.10 ** 0.05 *** 0.01) label ///
+>         keep(RD*) ///
+>         stats(bw covars FEs N,  ///
+>         labels("Bandwidth" "Hedonics" "TractFEs" "Observations" )) ///
+>         b(a3) nonotes booktabs nomtitles
+(output written to /home/sweeneri/Projects/Pipelines/DraftFiles/output/rd_linear_pge_letter.tex)
+
+. /*
+> *BINSCATTER
+>         binscatter lnprice dist if inrd, rd(0) linetype(lfit) title("Log(price)") saving(temp_lp, replace) nodraw
+>         binscatter resid_lnp_x_tr dist if inrd, rd(0) linetype(lfit) title("Residual - Log(price)") saving(temp_lp_res, replace)  nodraw        
+> graph combine temp_lp.gph temp_lp_res.gph, xsize(8) 
+> 
+> 
+> graph export "$outdir/pge_binscat_1k_2plot.eps", replace
+> */
+. 
+. capture log close

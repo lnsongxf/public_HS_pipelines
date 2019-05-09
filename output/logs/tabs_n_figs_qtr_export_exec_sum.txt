@@ -1,0 +1,345 @@
+-------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /home/sweeneri/Projects/Pipelines/DraftFiles/output/logs/tabs_n_fi
+> gs_qtr_export_exec_sum.txt
+  log type:  text
+ opened on:  13 Nov 2017, 15:28:03
+
+. set linesize 255
+
+. 
+. /*COMBINE ESTIMATES FROM DIFFERENT FILES TO CREATE TABLES */
+. 
+. *%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+. * COMPARE DIFFERENT TIME FE'S WITH 2K BIN
+. 
+. use if random_id < 0.01 using $ddir/generated_data/dd_regdata, clear
+
+. *NEED TO REASSIGN LABELS FOR ESTOUT
+. capture drop _T* PGE
+
+. do $ddir/analysis/pdd_prep_distance_defs_qtr.do
+
+. *define this in a separate do file so i can rerun the same code 
+. *after dropping distribution lines in other files
+. 
+. gen PGEpipe = cond(km_to_ng == km_to_anyPGEng,1,0)
+
+. gen PGEterr = (gasutility == "PGE")
+
+. * Note: in current approach, all PGE pipe is in PGE territory, but there are some houses closest to non-PGE pipe
+. * That is PGEpipe == 1 => PGEterr == 1 but not the converse
+. 
+. replace period = "PostCrash" if period == "Pre" & sr_date_transfer > (td(09sept2010) - 450)
+(0 real changes made)
+
+. 
+. /*NAMING CONVENTION
+> _T*_PERIOD_DISTANCE_PGE
+> T - DENOTES HOW DISTANCE IS SPECIFIED (IE 2K OR 660 FOOT BINS)
+> 
+> - SO TO RUN WITH PROPERTY FES, SPECIFY _T*_EXP AND _T*_LET
+> ---- FOR CROSS SECTION, ONLY NEED _T*
+> */
+. 
+. 
+. 
+. summ qtr_group_exp
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+qtr_group_~p |     68,169    31.25607    18.58162          1         67
+
+. global firstm = r(min)
+
+. global lastm = r(max)
+
+. summ qtr_group_exp if mo_post_exp == 0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+qtr_group_~p |        265          61           0         61         61
+
+. global event = r(min)
+
+. global eventminus1 = $event - 1
+
+. global eventminus2 = $event - 2
+
+. 
+. gen tempm = qtr_group_exp
+
+. 
+. * 1000 FOOT BIN REG SETUP
+. * Now a bit more complicated.  
+. * Want to make sure we get the letter coverage right, so go with territory?
+. capture drop bin1k
+
+. cap drop _T1k* 
+
+. global blist 2000 1000
+
+. gen bin1k = 9999
+
+. foreach b in $blist {
+  2.         replace bin1k = `b' if ft_to_ng < `b'
+  3. }
+(26,431 real changes made)
+(14,385 real changes made)
+
+. 
+. * Qtr main effect unnecessary (month FE)
+. * Qtr interaction vars
+. * Bin-related variables
+. foreach b in $blist {
+  2.     * main effect in and out of PGE by bin
+.     gen _T1k_bin_`b' = bin1k == `b'
+  3.     label var _T1k_bin_`b' "`b'ft"
+  4. 
+.     foreach m of numlist $firstm/$eventminus2 $event/$lastm {
+  5.         * Qtr in and out of PGE by bin
+.         gen _T1k_qtr_`m'_`b' = tempm == `m' & bin1k == `b'
+  6.         label var _T1k_qtr_`m'_`b' "Month `m'-`b'ft"
+  7.     }   
+  8. }
+
+. 
+. 
+. 
+. 
+end of do-file
+
+. 
+. summ qtr_group_exp if qtr_post_exp == 0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+qtr_group_~p |        805          61           0         61         61
+
+. global eventm = r(mean)
+
+. global eventminus2 = $eventm - 2
+
+. 
+. *MAKE SAME FIGURE WITH 1k BINS
+. 
+. local files: dir "$Edir" files "pdd_PGE_xs_1k_qtr*.ster"
+
+. 
+. foreach file of local files {
+  2.     local model = subinstr("`file'","pdd_PGE_xs_1k_qtr_","",.)
+  3.     local model = subinstr("`model'",".ster","",.)
+  4.     di "`model'"
+  5. 
+.     eststo clear
+  6.     estimates clear
+  7.     estimates use "$Edir/`file'"
+  8.         parmest, saving(est_`model', replace)
+  9. }
+TrDist
+file est_TrDist.dta saved
+TrPerTrends
+file est_TrPerTrends.dta saved
+TrQtr
+file est_TrQtr.dta saved
+Tr
+file est_Tr.dta saved
+TrPer
+file est_TrPer.dta saved
+
+. 
+. 
+. foreach file of local files {
+  2.     local model = subinstr("`file'","pdd_PGE_xs_1k_qtr_","",.)
+  3.     local model = subinstr("`model'",".ster","",.)
+  4.         use est_`model', clear
+  5.         keep if regexm(parm,"_T1k_qtr_[0-9]+_[0-9]+")
+  6.         gen qtr = regexs(1) if regexm(parm,"_T1k_qtr_([0-9]+)_[0-9]+")
+  7.         gen bin = regexs(1) if regexm(parm,"_T1k_qtr_[0-9]+_([0-9]*)")
+  8.         destring qtr bin, replace
+  9. 
+.     replace qtr = qtr - $eventm
+ 10.     expand 2 if qtr == 0, gen(minus1)
+ 11.     replace qtr = -1 if minus1 == 1
+ 12.         replace estimate = 0 if minus1 == 1
+ 13.         replace stderr = 0 if minus1 == 1
+ 14.     replace min95 = 0 if minus1 == 1
+ 15.         replace max95 = 0 if minus1 == 1
+ 16.         
+.         drop minus1
+ 17.         gen days = (qtr + 0.5)*90
+ 18. 
+.         summ min95
+ 19.         local grmin = floor(r(min)/0.01)*0.01
+ 20.         summ max95
+ 21.         local grmax = ceil(r(max)/0.01)*0.01
+ 22.         keep estimate stderr qtr days bin max95 min95
+ 23.         
+.         reshape wide estimate max95 min95 stderr, i(qtr days) j(bin)
+ 24.         
+.         save "$ddir/output/PGE_xs_qtr_`model'", replace
+ 25. }
+(413 observations deleted)
+qtr: all characters numeric; replaced as byte
+bin: all characters numeric; replaced as int
+(22 real changes made)
+(2 observations created)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       min95 |         24   -.0074709    .0050398  -.0166694          0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       max95 |         24    .0180146    .0071689          0   .0301722
+(note: j = 1000 2000)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                       24   ->      12
+Number of variables                   7   ->      10
+j variable (2 values)               bin   ->   (dropped)
+xij variables:
+                               estimate   ->   estimate1000 estimate2000
+                                  max95   ->   max951000 max952000
+                                  min95   ->   min951000 min952000
+                                 stderr   ->   stderr1000 stderr2000
+-----------------------------------------------------------------------------
+file /home/sweeneri/Projects/Pipelines/DraftFiles/output/PGE_xs_qtr_TrDist.dta saved
+(413 observations deleted)
+qtr: all characters numeric; replaced as byte
+bin: all characters numeric; replaced as int
+(22 real changes made)
+(2 observations created)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       min95 |         24   -.0124432    .0071688  -.0261131          0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       max95 |         24    .0161969    .0076627          0   .0296749
+(note: j = 1000 2000)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                       24   ->      12
+Number of variables                   7   ->      10
+j variable (2 values)               bin   ->   (dropped)
+xij variables:
+                               estimate   ->   estimate1000 estimate2000
+                                  max95   ->   max951000 max952000
+                                  min95   ->   min951000 min952000
+                                 stderr   ->   stderr1000 stderr2000
+-----------------------------------------------------------------------------
+file /home/sweeneri/Projects/Pipelines/DraftFiles/output/PGE_xs_qtr_TrPerTrends.dta saved
+(413 observations deleted)
+qtr: all characters numeric; replaced as byte
+bin: all characters numeric; replaced as int
+(22 real changes made)
+(2 observations created)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       min95 |         24   -.0142958     .007864  -.0265899          0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       max95 |         24     .017633    .0083212          0   .0313705
+(note: j = 1000 2000)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                       24   ->      12
+Number of variables                   7   ->      10
+j variable (2 values)               bin   ->   (dropped)
+xij variables:
+                               estimate   ->   estimate1000 estimate2000
+                                  max95   ->   max951000 max952000
+                                  min95   ->   min951000 min952000
+                                 stderr   ->   stderr1000 stderr2000
+-----------------------------------------------------------------------------
+file /home/sweeneri/Projects/Pipelines/DraftFiles/output/PGE_xs_qtr_TrQtr.dta saved
+(413 observations deleted)
+qtr: all characters numeric; replaced as byte
+bin: all characters numeric; replaced as int
+(22 real changes made)
+(2 observations created)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       min95 |         24   -.0070203    .0053134  -.0165137   .0016765
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       max95 |         24    .0187946    .0075258          0   .0321421
+(note: j = 1000 2000)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                       24   ->      12
+Number of variables                   7   ->      10
+j variable (2 values)               bin   ->   (dropped)
+xij variables:
+                               estimate   ->   estimate1000 estimate2000
+                                  max95   ->   max951000 max952000
+                                  min95   ->   min951000 min952000
+                                 stderr   ->   stderr1000 stderr2000
+-----------------------------------------------------------------------------
+file /home/sweeneri/Projects/Pipelines/DraftFiles/output/PGE_xs_qtr_Tr.dta saved
+(413 observations deleted)
+qtr: all characters numeric; replaced as byte
+bin: all characters numeric; replaced as int
+(22 real changes made)
+(2 observations created)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+(2 real changes made)
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       min95 |         24   -.0085058    .0061164  -.0207544          0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+       max95 |         24    .0178192     .007608          0   .0281124
+(note: j = 1000 2000)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                       24   ->      12
+Number of variables                   7   ->      10
+j variable (2 values)               bin   ->   (dropped)
+xij variables:
+                               estimate   ->   estimate1000 estimate2000
+                                  max95   ->   max951000 max952000
+                                  min95   ->   min951000 min952000
+                                 stderr   ->   stderr1000 stderr2000
+-----------------------------------------------------------------------------
+file /home/sweeneri/Projects/Pipelines/DraftFiles/output/PGE_xs_qtr_TrPer.dta saved
+
+. exit, clear
+
+end of do-file
